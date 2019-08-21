@@ -1,7 +1,7 @@
 # Goobi workflow Plugin: goobi-plugin-step-barcode-scanner
 
 
-
+A Goobi Plugin to assign structure information based on barcodes detected in images in process.
 ## Plugin details
 
 More information about the functionality of this plugin and the complete documentation can be found in the central documentation area at https://docs.intranda.com
