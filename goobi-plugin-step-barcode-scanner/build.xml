@@ -1,0 +1,8 @@
+<project name="goobi-plugin-step-analyse-imagenames" default="devbuild">
+	<target name="devbuild">
+		<exec executable="mvn">
+			<arg value="package"/>
+		</exec>
+		<copy file="target/plugin_intranda_step-barcode_scanner.jar" todir="/opt/digiverso/goobi/plugins/step/"/>
+	</target>
+</project>

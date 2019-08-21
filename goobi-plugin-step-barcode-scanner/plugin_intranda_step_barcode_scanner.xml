@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+	<!-- skip execution when data exist or overwrite/replace existing data -->
+	<skipWhenDataExists>false</skipWhenDataExists>
+	<!-- true if there might be more than 1 barcode per image -->
+	<multipleBarcodes>true</multipleBarcodes>
+	<!-- select the barcode reader implementation to use -->
+	<reader>multi</reader>
+	<!-- these structure elements are assumed to be exactly the page they appear 
+		on; can be combined with multipage structures and other single page structures -->
+	<singlePageStructures>
+		<item barcode="705632441947" docstruct="Cover" />
+		<item barcode="123456789012" docstruct="Advertising" />
+	</singlePageStructures>
+	<!-- these structures continue until another multipage structure starts 
+		or the barcode associated with DocStructEnd is found; cannot be combined with other multipage Structures-->
+	<multipageStructures>
+		<item barcode="123456789012" docstruct="Appendix" />
+		<item barcode="705632441947" docstruct="DocStructEnd" />
+	</multipageStructures>
+
+
+
+</config>
