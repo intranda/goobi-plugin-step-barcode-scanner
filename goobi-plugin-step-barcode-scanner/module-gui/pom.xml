@@ -21,7 +21,7 @@
 	</repositories>
 	<build>
 		<finalName>${jar.name}</finalName>
-		<sourceDirectory>../src</sourceDirectory>
+		<sourceDirectory>${project.basedir}/../src</sourceDirectory>
 		<resources>
 			<resource>
 				<directory>../GUI</directory>
