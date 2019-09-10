@@ -90,48 +90,13 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         Process process = ProcessManager.getProcessById(ticket.getProcessId());
         Prefs prefs = process.getRegelsatz().getPreferences();
 
-        // read config and set object variables accordingly
-        XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
-        config.setExpressionEngine(new XPathExpressionEngine());
-        skipWhenDataExists = config.getBoolean("/skipWhenDataExists", false);
-
-        docstructMap = new HashMap<>();
-        @SuppressWarnings("unchecked")
-        List<HierarchicalConfiguration> itemList = config.configurationsAt("/singlePageStructures/item");
-        for (HierarchicalConfiguration item : itemList) {
-            docstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
-        }
-        multiPageDocstructMap = new HashMap<>();
-        @SuppressWarnings("unchecked")
-        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructures/item");
-        for (HierarchicalConfiguration item : multiPageItemList) {
-            multiPageDocstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
-        }
-        // if this is set true the plugin will look for more than one barcode per image
-        hasMultipleBarcodes = config.getBoolean("/multipleBarcodes");
-        //this is the reader used to decode the barcodes on images
-        switch (config.getString("/reader")) {
-            case ("ean13"):
-                reader = new EAN13Reader();
-                break;
-            case ("UPCA"):
-                reader = new UPCAReader();
-                break;
-            case ("qr"):
-                reader = new QRCodeReader();
-                break;
-            case ("multi"):
-            default:
-                // contains all other readers, slower and more prone to find non existent codes but more versatile
-                reader = new MultiFormatReader();
-        }
+        setGlobalFields();
 
         DocStruct physical = null;
         DocStruct logical = null;
         List<String> orderedImageNameList = null;
         Fileformat ff = null;
         DigitalDocument digDoc = null;
-
         String foldername = null;
         // read image names
         try {
@@ -219,6 +184,47 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         }
 
         return PluginReturnValue.FINISH;
+    }
+
+    /**
+     * Reads Configfile and sets global fields accordingly
+     */
+    private void setGlobalFields() {
+        // read config and set object variables accordingly
+        XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
+        config.setExpressionEngine(new XPathExpressionEngine());
+        skipWhenDataExists = config.getBoolean("/skipWhenDataExists", false);
+
+        docstructMap = new HashMap<>();
+        @SuppressWarnings("unchecked")
+        List<HierarchicalConfiguration> itemList = config.configurationsAt("/singlePageStructures/item");
+        for (HierarchicalConfiguration item : itemList) {
+            docstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+        }
+        multiPageDocstructMap = new HashMap<>();
+        @SuppressWarnings("unchecked")
+        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructures/item");
+        for (HierarchicalConfiguration item : multiPageItemList) {
+            multiPageDocstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+        }
+        // if this is set true the plugin will look for more than one barcode per image
+        hasMultipleBarcodes = config.getBoolean("/multipleBarcodes");
+        //this is the reader used to decode the barcodes on images
+        switch (config.getString("/reader")) {
+            case ("ean13"):
+                reader = new EAN13Reader();
+                break;
+            case ("UPCA"):
+                reader = new UPCAReader();
+                break;
+            case ("qr"):
+                reader = new QRCodeReader();
+                break;
+            case ("multi"):
+            default:
+                // contains all other readers, slower and more prone to find non existent codes but more versatile
+                reader = new MultiFormatReader();
+        }
     }
 
     private List<String> readBarcodes(Process process, String imageName) throws IOException, InterruptedException, SwapException, DAOException {
