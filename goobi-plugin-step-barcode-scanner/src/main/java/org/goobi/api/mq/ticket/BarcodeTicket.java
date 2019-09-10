@@ -1,4 +1,4 @@
-package de.intranda.goobi.plugins;
+package org.goobi.api.mq.ticket;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -9,24 +9,17 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
-import javax.jms.JMSException;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.configuration.tree.xpath.XPathExpressionEngine;
 import org.apache.commons.lang.SystemUtils;
 import org.goobi.api.mq.TaskTicket;
-import org.goobi.api.mq.TicketGenerator;
+import org.goobi.api.mq.TicketHandler;
 import org.goobi.beans.Process;
-import org.goobi.beans.Step;
-import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
-import org.goobi.production.enums.PluginType;
-import org.goobi.production.enums.StepReturnValue;
-import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.ChecksumException;
@@ -48,9 +41,8 @@ import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
-import lombok.Data;
+import de.sub.goobi.persistence.managers.ProcessManager;
 import lombok.extern.log4j.Log4j;
-import net.xeoh.plugins.base.annotations.PluginImplementation;
 import ugh.dl.ContentFile;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
@@ -68,20 +60,10 @@ import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.exceptions.WriteException;
 
-@Data
 @Log4j
-@PluginImplementation
-public class BarcodeScanner implements IStepPluginVersion2 {
-
-    private PluginGuiType pluginGuiType = PluginGuiType.NONE;
-
+public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
+    private static final String LOGICAL_PHYSICAL = "logical_physical";
     private String title = "intranda_step_barcode_scanner";
-
-    private PluginType type = PluginType.Step;
-
-    private Step step;
-
-    private Pattern imagePattern;
 
     private boolean skipWhenDataExists;
 
@@ -100,166 +82,143 @@ public class BarcodeScanner implements IStepPluginVersion2 {
      * This Map contains barcodes and the names of DocStruct elements which will create structure elements spanning multiple pages
      */
     private Map<String, String> multiPageDocstructMap;
-    private static final String LOGICAL_PHYSICAL = "logical_physical";
-
-    public BarcodeScanner() {
-
-//        XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
-//        config.setExpressionEngine(new XPathExpressionEngine());
-//        skipWhenDataExists = config.getBoolean("/skipWhenDataExists", false);
-//        String regexp = config.getString("/paginationRegex");
-//        imagePattern = Pattern.compile(regexp);
-//
-//        docstructMap = new HashMap<>();
-//        @SuppressWarnings("unchecked")
-//        List<HierarchicalConfiguration> itemList = config.configurationsAt("/singlePageStructures/item");
-//        for (HierarchicalConfiguration item : itemList) {
-//            docstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
-//        }
-//        multiPageDocstructMap = new HashMap<>();
-//        @SuppressWarnings("unchecked")
-//        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructures/item");
-//        for (HierarchicalConfiguration item : multiPageItemList) {
-//            multiPageDocstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
-//        }
-//        // if this is set true the plugin will look for more than one barcode per image
-//        hasMultipleBarcodes = config.getBoolean("/multipleBarcodes");
-//        switch (config.getString("/reader")) {
-//            case ("ean13"):
-//                reader = new EAN13Reader();
-//                break;
-//            case ("UPCA"):
-//                reader = new UPCAReader();
-//                break;
-//            case ("qr"):
-//                reader = new QRCodeReader();
-//                break;
-//            case ("multi"):
-//            default:
-//                // contains all other readers, slower and more prone to find non existent codes but more versatile
-//                reader = new MultiFormatReader();
-//        }
-
-    }
 
     @Override
-    public PluginReturnValue run() {
+    public PluginReturnValue call(TaskTicket ticket) {
+        log.info("Barcode ticket for " + ticket.getProcessName());
 
-        TaskTicket exportTicket = TicketGenerator.generateSimpleTicket("BarcodeScanner");
-        exportTicket.setProcessId(step.getProzess().getId());
-        exportTicket.setProcessName(step.getProzess().getTitel());
+        Process process = ProcessManager.getProcessById(ticket.getProcessId());
+        Prefs prefs = process.getRegelsatz().getPreferences();
 
-        exportTicket.setStepId(step.getId());
-        exportTicket.setStepName(step.getTitel());
-        
+        // read config and set object variables accordingly
+        XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
+        config.setExpressionEngine(new XPathExpressionEngine());
+        skipWhenDataExists = config.getBoolean("/skipWhenDataExists", false);
 
+        docstructMap = new HashMap<>();
+        @SuppressWarnings("unchecked")
+        List<HierarchicalConfiguration> itemList = config.configurationsAt("/singlePageStructures/item");
+        for (HierarchicalConfiguration item : itemList) {
+            docstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+        }
+        multiPageDocstructMap = new HashMap<>();
+        @SuppressWarnings("unchecked")
+        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructures/item");
+        for (HierarchicalConfiguration item : multiPageItemList) {
+            multiPageDocstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+        }
+        // if this is set true the plugin will look for more than one barcode per image
+        hasMultipleBarcodes = config.getBoolean("/multipleBarcodes");
+        //this is the reader used to decode the barcodes on images
+        switch (config.getString("/reader")) {
+            case ("ean13"):
+                reader = new EAN13Reader();
+                break;
+            case ("UPCA"):
+                reader = new UPCAReader();
+                break;
+            case ("qr"):
+                reader = new QRCodeReader();
+                break;
+            case ("multi"):
+            default:
+                // contains all other readers, slower and more prone to find non existent codes but more versatile
+                reader = new MultiFormatReader();
+        }
+
+        DocStruct physical = null;
+        DocStruct logical = null;
+        List<String> orderedImageNameList = null;
+        Fileformat ff = null;
+        DigitalDocument digDoc = null;
+
+        String foldername = null;
+        // read image names
         try {
-            TicketGenerator.submitTicket(exportTicket, true);
-        } catch (JMSException e) {
+            foldername = process.getImagesOrigDirectory(false);
+            orderedImageNameList = StorageProvider.getInstance().list(foldername);
+            if (orderedImageNameList.isEmpty()) {
+                // abort
+                log.info(process.getTitel() + ": no images found");
+                return PluginReturnValue.ERROR;
+            }
+        } catch (IOException | InterruptedException | SwapException | DAOException e) {
+            log.error(e);
             return PluginReturnValue.ERROR;
         }
 
-        return PluginReturnValue.WAIT;
-        
-        
-        
-        
-        
-//        Process process = step.getProzess();
-//        Prefs prefs = process.getRegelsatz().getPreferences();
-//        DocStruct physical = null;
-//        DocStruct logical = null;
-//        List<String> orderedImageNameList = null;
-//        Fileformat ff = null;
-//        DigitalDocument digDoc = null;
-//
-//        String foldername = null;
-//        // read image names
-//        try {
-//            foldername = process.getImagesOrigDirectory(false);
-//            orderedImageNameList = StorageProvider.getInstance().list(foldername);
-//            if (orderedImageNameList.isEmpty()) {
-//                // abort
-//                log.info(process.getTitel() + ": no images found");
-//                return PluginReturnValue.ERROR;
-//            }
-//        } catch (IOException | InterruptedException | SwapException | DAOException e) {
-//            log.error(e);
-//            return PluginReturnValue.ERROR;
-//        }
-//
-//        try {
-//            // read mets file
-//            ff = process.readMetadataFile();
-//            digDoc = ff.getDigitalDocument();
-//            logical = digDoc.getLogicalDocStruct();
-//            if (logical.getType().isAnchor()) {
-//                logical = logical.getAllChildren().get(0);
-//            }
-//            physical = digDoc.getPhysicalDocStruct();
-//            // check if pagination was already written
-//            List<DocStruct> pages = physical.getAllChildren();
-//            if (pages != null && !pages.isEmpty()) {
-//                if (skipWhenDataExists) {
-//                    return PluginReturnValue.FINISH;
-//                }
-//                removeExistingData(physical, logical, ff, pages);
-//            }
-//
-//        } catch (ReadException | PreferencesException | WriteException | IOException | InterruptedException | SwapException | DAOException e) {
-//            log.error(e);
-//            return PluginReturnValue.ERROR;
-//        }
-//
-//        DocStructType pageType = prefs.getDocStrctTypeByName("page");
-//        MetadataType physType = prefs.getMetadataTypeByName("physPageNumber");
-//        MetadataType logType = prefs.getMetadataTypeByName("logicalPageNumber");
-//        DocStruct currentMultiPageDS = null;
-//
-//        for (int index = 0; index < orderedImageNameList.size(); index++) {
-//            String imageName = orderedImageNameList.get(index);
-//            try {
-//                DocStruct dsPage = digDoc.createDocStruct(pageType);
-//
-//                ContentFile cf = new ContentFile();
-//                if (SystemUtils.IS_OS_WINDOWS) {
-//                    cf.setLocation("file:/" + foldername + imageName);
-//                } else {
-//                    cf.setLocation("file://" + foldername + imageName);
-//                }
-//                dsPage.addContentFile(cf);
-//
-//                physical.addChild(dsPage);
-//                Metadata mdPhysPageNo = new Metadata(physType);
-//                mdPhysPageNo.setValue(String.valueOf(index + 1));
-//                dsPage.addMetadata(mdPhysPageNo);
-//
-//                Metadata mdLogicalPageNo = new Metadata(logType);
-//                dsPage.addMetadata(mdLogicalPageNo);
-//                logical.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
-//
-//                // try to detect barcodes on this image 
-//                List<String> detectedBarcode = readBarcodes(process, imageName);
-//
-//                currentMultiPageDS = generateDocStructs(prefs, logical, digDoc, currentMultiPageDS, imageName, dsPage, detectedBarcode);
-//
-//            } catch (TypeNotAllowedForParentException | TypeNotAllowedAsChildException | MetadataTypeNotAllowedException
-//                    | DocStructHasNoTypeException e) {
-//                log.error(e);
-//                return PluginReturnValue.ERROR;
-//            } catch (IOException | DAOException | InterruptedException | SwapException e) {
-//                log.error("Unable to read file " + imageName, e);
-//                return PluginReturnValue.ERROR;
-//            }
-//        }
-//        try {
-//            process.writeMetadataFile(ff);
-//        } catch (WriteException | PreferencesException | IOException | InterruptedException | SwapException | DAOException e) {
-//            log.error(e);
-//            return PluginReturnValue.ERROR;
-//        }
-//
-//        return PluginReturnValue.FINISH;
+        try {
+            // read mets file
+            ff = process.readMetadataFile();
+            digDoc = ff.getDigitalDocument();
+            logical = digDoc.getLogicalDocStruct();
+            if (logical.getType().isAnchor()) {
+                logical = logical.getAllChildren().get(0);
+            }
+            physical = digDoc.getPhysicalDocStruct();
+            // check if pagination was already written
+            List<DocStruct> pages = physical.getAllChildren();
+            if (pages != null && !pages.isEmpty()) {
+                if (skipWhenDataExists) {
+                    return PluginReturnValue.FINISH;
+                }
+                removeExistingData(physical, logical, ff, pages);
+            }
+
+        } catch (ReadException | PreferencesException | WriteException | IOException | InterruptedException | SwapException | DAOException e) {
+            log.error(e);
+            return PluginReturnValue.ERROR;
+        }
+
+        DocStructType pageType = prefs.getDocStrctTypeByName("page");
+        MetadataType physType = prefs.getMetadataTypeByName("physPageNumber");
+        MetadataType logType = prefs.getMetadataTypeByName("logicalPageNumber");
+        DocStruct currentMultiPageDS = null;
+
+        for (int index = 0; index < orderedImageNameList.size(); index++) {
+            String imageName = orderedImageNameList.get(index);
+            try {
+                DocStruct dsPage = digDoc.createDocStruct(pageType);
+
+                ContentFile cf = new ContentFile();
+                if (SystemUtils.IS_OS_WINDOWS) {
+                    cf.setLocation("file:/" + foldername + imageName);
+                } else {
+                    cf.setLocation("file://" + foldername + imageName);
+                }
+                dsPage.addContentFile(cf);
+
+                physical.addChild(dsPage);
+                Metadata mdPhysPageNo = new Metadata(physType);
+                mdPhysPageNo.setValue(String.valueOf(index + 1));
+                dsPage.addMetadata(mdPhysPageNo);
+
+                Metadata mdLogicalPageNo = new Metadata(logType);
+                dsPage.addMetadata(mdLogicalPageNo);
+                logical.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
+
+                // try to detect barcodes on this image 
+                List<String> detectedBarcode = readBarcodes(process, imageName);
+
+                currentMultiPageDS = generateDocStructs(prefs, logical, digDoc, currentMultiPageDS, imageName, dsPage, detectedBarcode);
+
+            } catch (TypeNotAllowedForParentException | TypeNotAllowedAsChildException | MetadataTypeNotAllowedException
+                    | DocStructHasNoTypeException e) {
+                log.error(e);
+                return PluginReturnValue.ERROR;
+            } catch (IOException | DAOException | InterruptedException | SwapException e) {
+                log.error("Unable to read file " + imageName, e);
+                return PluginReturnValue.ERROR;
+            }
+        }
+        try {
+            process.writeMetadataFile(ff);
+        } catch (WriteException | PreferencesException | IOException | InterruptedException | SwapException | DAOException e) {
+            log.error(e);
+            return PluginReturnValue.ERROR;
+        }
+
+        return PluginReturnValue.FINISH;
     }
 
     private List<String> readBarcodes(Process process, String imageName) throws IOException, InterruptedException, SwapException, DAOException {
@@ -278,6 +237,20 @@ public class BarcodeScanner implements IStepPluginVersion2 {
         return detectedBarcode;
     }
 
+    /**
+     * Generates the doc struct elements in logical according to the detectedBarcode(s)
+     * 
+     * @param prefs
+     * @param logical
+     * @param digDoc
+     * @param currentMultiPageDS
+     * @param imageName
+     * @param dsPage
+     * @param detectedBarcode
+     * @return
+     * @throws TypeNotAllowedForParentException
+     * @throws TypeNotAllowedAsChildException
+     */
     private DocStruct generateDocStructs(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS, String imageName,
             DocStruct dsPage, List<String> detectedBarcode) throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException {
         for (String barcode : detectedBarcode) {
@@ -337,42 +310,22 @@ public class BarcodeScanner implements IStepPluginVersion2 {
     }
 
     @Override
-    public String cancel() {
-        return null;
+    public String getTicketHandlerName() {
+        return "BarcodeScanner";
     }
 
-    @Override
-    public boolean execute() {
-        PluginReturnValue val = run();
-        return false;
-//        return val == PluginReturnValue.FINISH;
-    }
-
-    @Override
-    public String finish() {
-        return null;
-    }
-
-    @Override
-    public String getPagePath() {
-        return null;
-    }
-
-    @Override
-    public void initialize(Step step, String returnPath) {
-        this.step = step;
-    }
-
-    @Override
-    public HashMap<String, StepReturnValue> validate() {
-        return null;
-    }
-
-    @Override
-    public int getInterfaceVersion() {
-        return 0;
-    }
-
+    /**
+     * Searches for a barcode on image found at fileName in the image folder of process using passed reader
+     * 
+     * @param fileName
+     * @param mfr
+     * @param process
+     * @return
+     * @throws IOException
+     * @throws DAOException
+     * @throws InterruptedException
+     * @throws SwapException
+     */
     private static String decodeBarcode(String fileName, Reader mfr, Process process)
             throws IOException, DAOException, InterruptedException, SwapException {
         try (InputStream is = StorageProvider.getInstance().newInputStream(Paths.get(process.getImagesOrigDirectory(false), fileName))) {
@@ -400,6 +353,18 @@ public class BarcodeScanner implements IStepPluginVersion2 {
         }
     }
 
+    /**
+     * Detects barcodes in the image with name fileName in the image folder of process using passed Reader, allows for multiple Codes to be detected
+     * 
+     * @param fileName
+     * @param mbr
+     * @param process
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws SwapException
+     * @throws DAOException
+     */
     private static List<String> decodeMultipleBarcodes(String fileName, GenericMultipleBarcodeReader mbr, Process process)
             throws IOException, InterruptedException, SwapException, DAOException {
         try (InputStream is = StorageProvider.getInstance().newInputStream(Paths.get(process.getImagesOrigDirectory(false), fileName))) {

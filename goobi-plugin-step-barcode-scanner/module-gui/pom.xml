@@ -1,37 +1,39 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>de.intranda.goobi.plugins.step</groupId>
-    <artifactId>goobi-plugin-step-barcodeScanner</artifactId>
-    <version>${goobi.pluginversion}</version>
-    <packaging>pom</packaging>
-    <properties>
-        <goobi.pluginversion>0.0.1-SNAPSHOT</goobi.pluginversion>
-        <dest.folder.main>/opt/digiverso/goobi/plugins/step/</dest.folder.main>
-        <dest.folder.gui>/opt/digiverso/goobi/plugins/GUI/</dest.folder.gui>
-        <jar.name>plugin_intranda_step-barcode_scanner</jar.name>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-    </properties>
-    <url>http://maven.apache.org</url>
-    <repositories>
-        <repository>
-            <id>intranda-public</id>
-            <url>https://nexus.intranda.com/repository/maven-public</url>
-        </repository>
-    </repositories>
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>de.intranda.goobi.plugins.step</groupId>
+	<artifactId>goobi-plugin-step-barcodeScanner-gui</artifactId>
+	<parent>
+		<groupId>de.intranda.goobi.plugins.step</groupId>
+		<artifactId>goobi-plugin-step-barcodeScanner</artifactId>
+		<version>${goobi.pluginversion}</version>
+	</parent>
+	<properties>
+		<jar.name>plugin_intranda_step-barcode_scanner-GUI</jar.name>
+		<dest.folder>/opt/digiverso/goobi/plugins/GUI/</dest.folder>
+	</properties>
+	<repositories>
+		<repository>
+			<id>intranda-public</id>
+			<url>https://nexus.intranda.com/repository/maven-public</url>
+		</repository>
+	</repositories>
 	<build>
 		<finalName>${jar.name}</finalName>
-		<sourceDirectory>src</sourceDirectory>
-		<testSourceDirectory>test/src</testSourceDirectory>
+		<sourceDirectory>../src</sourceDirectory>
 		<resources>
 			<resource>
-				<directory>src</directory>
+				<directory>../GUI</directory>
+			</resource>
+			<resource>
+				<directory>../src</directory>
 				<excludes>
 					<exclude>**/*.java</exclude>
 				</excludes>
+				<includes>
+					<include>**/org/goobi/api/mq/ticket/*.class</include>
+				</includes>
 			</resource>
 		</resources>
 		<plugins>
@@ -41,7 +43,11 @@
 				<configuration>
 					<source>1.8</source>
 					<target>1.8</target>
+					<excludes>
+						<exclude>**/de/intranda/goobi/**/*.java</exclude>
+					</excludes>
 				</configuration>
+
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -50,6 +56,32 @@
 				<configuration>
 					<skipTests>true</skipTests>
 				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>2.8</version>
+				<executions>
+					<execution>
+						<id>copy-installed</id>
+						<phase>install</phase>
+						<goals>
+							<goal>copy</goal>
+						</goals>
+						<configuration>
+							<artifactItems>
+								<artifactItem>
+									<groupId>${project.groupId}</groupId>
+									<artifactId>${project.artifactId}</artifactId>
+									<version>${project.version}</version>
+									<type>${project.packaging}</type>
+									<destFileName>${jar.name}.jar</destFileName>
+								</artifactItem>
+							</artifactItems>
+							<outputDirectory>${dest.folder}</outputDirectory>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
@@ -93,45 +125,9 @@
 			</plugin>
 		</plugins>
 	</build>
-	<dependencies>
-		<dependency>
-			<groupId>de.intranda.goobi.workflow</groupId>
-			<artifactId>goobi-core-jar</artifactId>
-			<version>3.0.12</version>
-		</dependency>
-		<!-- https://mvnrepository.com/artifact/junit/junit -->
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<version>4.12</version>
-			<scope>test</scope>
-		</dependency>
-		<!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
-		<dependency>
-			<groupId>org.projectlombok</groupId>
-			<artifactId>lombok</artifactId>
-			<version>1.18.4</version>
-			<scope>provided</scope>
-		</dependency>
-		<!-- https://mvnrepository.com/artifact/com.google.zxing/core -->
-		<dependency>
-			<groupId>com.google.zxing</groupId>
-			<artifactId>core</artifactId>
-			<version>3.4.0</version>
-		</dependency>
 
-		<!-- https://mvnrepository.com/artifact/com.google.zxing/javase -->
-		<dependency>
-			<groupId>com.google.zxing</groupId>
-			<artifactId>javase</artifactId>
-			<version>3.4.0</version>
-		</dependency>
-	</dependencies>
-    <modules>
-        <module>module-gui</module>
-        <module>module-main</module>
-    </modules>
-    	<scm>
+
+	<scm>
 		<url>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-barcode-scanner.git</url>
 		<connection>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-step-barcode-scanner.git</connection>
 	</scm>
