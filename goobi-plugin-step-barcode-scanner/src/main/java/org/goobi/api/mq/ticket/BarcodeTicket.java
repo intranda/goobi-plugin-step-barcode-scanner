@@ -60,6 +60,18 @@ import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.exceptions.WriteException;
 
+/**
+ * This Plugin iterates over all images in the image directory of the associated process scanning them for barcodes. If one is found it checks its
+ * configuration file to see if the found barcode is associated with a docStruct. If so the image is associated with that docstruct. There is a second
+ * category of Docstructs which can be configured, which then continue adding the following Pages to the same struct until a new one starts or a
+ * configured terminator is found in a barcode.
+ *
+ * Possible Extensions:
+ *
+ * - Add functionality to add Metadata to the page/docstruct through barcodes
+ *
+ * - Rewrite so the existence of a Barcode type on a Page and not its content triggers the creation of the docStruct
+ */
 @Log4j
 public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
     private static final String LOGICAL_PHYSICAL = "logical_physical";
@@ -67,7 +79,11 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
 
     private boolean skipWhenDataExists;
 
-    private Map<String, String> docstructMap;
+    private boolean docByType;
+
+    private Map<String, String> docstructMapString;
+    private Map<String, String> docstructMapType;
+    private String uuidMetadata;
 
     /**
      * The reader to be used to find barcodes
@@ -81,7 +97,8 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
     /**
      * This Map contains barcodes and the names of DocStruct elements which will create structure elements spanning multiple pages
      */
-    private Map<String, String> multiPageDocstructMap;
+    private Map<String, String> multiPageDocstructMapString;
+    private Map<String, String> multiPageDocstructMapType;
 
     @Override
     public PluginReturnValue call(TaskTicket ticket) {
@@ -90,7 +107,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         Process process = ProcessManager.getProcessById(ticket.getProcessId());
         Prefs prefs = process.getRegelsatz().getPreferences();
 
-        setGlobalFields();
+        setGlobalFields(process);
 
         DocStruct physical = null;
         DocStruct logical = null;
@@ -162,11 +179,13 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
                 dsPage.addMetadata(mdLogicalPageNo);
                 logical.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
 
-                // try to detect barcodes on this image 
-                List<String> detectedBarcode = readBarcodes(process, imageName);
-
-                currentMultiPageDS = generateDocStructs(prefs, logical, digDoc, currentMultiPageDS, imageName, dsPage, detectedBarcode);
-
+                // try to detect barcodes on this image
+                List<Result> detectedBarcode = readBarcodes(process, imageName);
+                if (docByType) {
+                    currentMultiPageDS = generateDocStructsFromType(prefs, logical, digDoc, currentMultiPageDS, imageName, dsPage, detectedBarcode);
+                } else {
+                    currentMultiPageDS = generateDocStructsFromString(prefs, logical, digDoc, currentMultiPageDS, imageName, dsPage, detectedBarcode);
+                }
             } catch (TypeNotAllowedForParentException | TypeNotAllowedAsChildException | MetadataTypeNotAllowedException
                     | DocStructHasNoTypeException e) {
                 log.error(e);
@@ -189,23 +208,39 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
     /**
      * Reads Configfile and sets global fields accordingly
      */
-    private void setGlobalFields() {
+    private void setGlobalFields(Process process) {
+        String parentStruct = "";
+        try {
+            parentStruct = process.readMetadataFile().getDigitalDocument().getLogicalDocStruct().getType().getName();
+        } catch (PreferencesException | ReadException | WriteException | IOException | InterruptedException | SwapException | DAOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
         // read config and set object variables accordingly
         XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
         config.setExpressionEngine(new XPathExpressionEngine());
         skipWhenDataExists = config.getBoolean("/skipWhenDataExists", false);
-
-        docstructMap = new HashMap<>();
+        docByType = config.getBoolean("/docStuctByType", false);
+        docstructMapString = new HashMap<>();
+        docstructMapType = new HashMap<>();
+        uuidMetadata = config.getString("/uuidMetadatum");
         @SuppressWarnings("unchecked")
         List<HierarchicalConfiguration> itemList = config.configurationsAt("/singlePageStructures/item");
         for (HierarchicalConfiguration item : itemList) {
-            docstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+            if (item.getString("@parentStruct").equals(parentStruct)) {
+                docstructMapString.put(item.getString("@barcode"), item.getString("@docstruct"));
+                docstructMapType.put(item.getString("@type"), item.getString("@docstruct"));
+            }
         }
-        multiPageDocstructMap = new HashMap<>();
+        multiPageDocstructMapString = new HashMap<>();
+        multiPageDocstructMapType = new HashMap<>();
         @SuppressWarnings("unchecked")
-        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructures/item");
+        List<HierarchicalConfiguration> multiPageItemList = config.configurationsAt("/multipageStructure/item");
         for (HierarchicalConfiguration item : multiPageItemList) {
-            multiPageDocstructMap.put(item.getString("@barcode"), item.getString("@docstruct"));
+            if (item.getString("@parentStruct").equals(parentStruct)) {
+                multiPageDocstructMapString.put(item.getString("@barcode"), item.getString("@docstruct"));
+                multiPageDocstructMapType.put(item.getString("@type"), item.getString("@docstruct"));
+            }
         }
         // if this is set true the plugin will look for more than one barcode per image
         hasMultipleBarcodes = config.getBoolean("/multipleBarcodes");
@@ -227,14 +262,25 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         }
     }
 
-    private List<String> readBarcodes(Process process, String imageName) throws IOException, InterruptedException, SwapException, DAOException {
-        List<String> detectedBarcode = new ArrayList<>();
+    /**
+     * Checks if one or more barcodes are to be read and calls the appropriate method, compiling the return
+     *
+     * @param process
+     * @param imageName
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws SwapException
+     * @throws DAOException
+     */
+    private List<Result> readBarcodes(Process process, String imageName) throws IOException, InterruptedException, SwapException, DAOException {
+        List<Result> detectedBarcode = new ArrayList<>();
         // needs a wrapper for the reader if there are possibly more than 1 code on the image
         if (hasMultipleBarcodes) {
             GenericMultipleBarcodeReader gmbr = new GenericMultipleBarcodeReader(reader);
             detectedBarcode = decodeMultipleBarcodes(imageName, gmbr, process);
         } else {
-            String tmpBarcode = decodeBarcode(imageName, reader, process);
+            Result tmpBarcode = decodeBarcode(imageName, reader, process);
 
             if (tmpBarcode != null) {
                 detectedBarcode.add(tmpBarcode);
@@ -245,7 +291,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
 
     /**
      * Generates the doc struct elements in logical according to the detectedBarcode(s)
-     * 
+     *
      * @param prefs
      * @param logical
      * @param digDoc
@@ -256,38 +302,43 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
      * @return
      * @throws TypeNotAllowedForParentException
      * @throws TypeNotAllowedAsChildException
+     * @throws MetadataTypeNotAllowedException
      */
-    private DocStruct generateDocStructs(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS, String imageName,
-            DocStruct dsPage, List<String> detectedBarcode) throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException {
-        for (String barcode : detectedBarcode) {
-            log.debug("Barcode found in image " + imageName + " " + barcode);
+    private DocStruct generateDocStructsFromString(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS,
+            String imageName, DocStruct dsPage, List<Result> detectedBarcode)
+            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
+        for (Result barcode : detectedBarcode) {
+            String barcodeString = String.valueOf(barcode);
+            log.debug("Barcode found in image " + imageName + " " + barcodeString);
             // check if the barcode matches a single page doc struct, if so add it
-            if (docstructMap.containsKey(barcode)) {
-                String docstructName = docstructMap.get(barcode);
-                log.debug("Barcode " + barcode + " is associated with doc struct " + docstructName);
+            if (docstructMapString.containsKey(barcodeString)) {
+                String docstructName = docstructMapString.get(barcodeString);
+                log.debug("Barcode " + barcodeString + " is associated with doc struct " + docstructName);
                 DocStructType docStructType = prefs.getDocStrctTypeByName(docstructName);
                 if (docStructType == null) {
                     log.debug("DocStructType " + docstructName + "not found in ruleset");
                 } else {
                     DocStruct ds = digDoc.createDocStruct(docStructType);
+                    addBarcodeMetadatum(prefs, barcode, ds);
                     logical.addChild(ds);
                     ds.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
                 }
             }
             // check if the barcode matches a multipage structure, if so generate and add it to the logical structure, pages are added later
-            if (multiPageDocstructMap.containsKey(barcode)) {
-                String docstructName = multiPageDocstructMap.get(barcode);
+            if (multiPageDocstructMapString.containsKey(barcodeString)) {
+                String docstructName = multiPageDocstructMapString.get(barcodeString);
                 if ("DocStructEnd".equals(docstructName)) {
                     currentMultiPageDS = null;
                     continue;
                 }
-                log.debug("Barcode " + barcode + " is associated with doc struct " + docstructName);
+                log.debug("Barcode " + barcodeString + " is associated with doc struct " + docstructName);
                 DocStructType docStructType = prefs.getDocStrctTypeByName(docstructName);
                 if (docStructType == null) {
                     log.debug("DocStructType " + docstructName + "not found in ruleset");
                 } else {
                     currentMultiPageDS = digDoc.createDocStruct(docStructType);
                     logical.addChild(currentMultiPageDS);
+                    addBarcodeMetadatum(prefs, barcode, currentMultiPageDS);
                 }
             }
         }
@@ -296,6 +347,74 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
             currentMultiPageDS.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
         }
         return currentMultiPageDS;
+    }
+
+    /**
+     * Generates the doc struct elements in logical according to the detectedBarcode(s)
+     *
+     * @param prefs
+     * @param logical
+     * @param digDoc
+     * @param currentMultiPageDS
+     * @param imageName
+     * @param dsPage
+     * @param detectedBarcode
+     * @return
+     * @throws TypeNotAllowedForParentException
+     * @throws TypeNotAllowedAsChildException
+     * @throws MetadataTypeNotAllowedException
+     */
+    private DocStruct generateDocStructsFromType(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS,
+            String imageName, DocStruct dsPage, List<Result> detectedBarcode)
+            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
+        for (Result barcode : detectedBarcode) {
+            String barcodeType = barcode.getBarcodeFormat().toString();
+            log.debug("Barcode found in image " + imageName + " " + barcodeType);
+            // check if the barcode matches a single page doc struct, if so add it
+            if (docstructMapType.containsKey(barcodeType)) {
+                String docstructName = docstructMapType.get(barcodeType);
+                log.debug("Barcode " + barcodeType + " is associated with doc struct " + docstructName);
+                DocStructType docStructType = prefs.getDocStrctTypeByName(docstructName);
+                if (docStructType == null) {
+                    log.debug("DocStructType " + docstructName + "not found in ruleset");
+                } else {
+                    DocStruct ds = digDoc.createDocStruct(docStructType);
+                    addBarcodeMetadatum(prefs, barcode, ds);
+                    logical.addChild(ds);
+                    ds.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
+                }
+            }
+            // check if the barcode matches a multipage structure, if so generate and add it to the logical structure, pages are added later
+            if (multiPageDocstructMapType.containsKey(barcodeType)) {
+                String docstructName = multiPageDocstructMapType.get(barcodeType);
+                if ("DocStructEnd".equals(docstructName)) {
+                    currentMultiPageDS = null;
+                    continue;
+                }
+                log.debug("Barcode " + barcodeType + " is associated with doc struct " + docstructName);
+                DocStructType docStructType = prefs.getDocStrctTypeByName(docstructName);
+                if (docStructType == null) {
+                    log.debug("DocStructType " + docstructName + "not found in ruleset");
+                } else {
+                    currentMultiPageDS = digDoc.createDocStruct(docStructType);
+                    logical.addChild(currentMultiPageDS);
+                    addBarcodeMetadatum(prefs, barcode, currentMultiPageDS);
+                }
+            }
+        }
+        // if currentMultiPageDS is set, all current pages are meant to belong to that multi page structure, so add this one
+        if (currentMultiPageDS != null) {
+            currentMultiPageDS.addReferenceTo(dsPage, LOGICAL_PHYSICAL);
+        }
+        return currentMultiPageDS;
+    }
+
+    private void addBarcodeMetadatum(Prefs prefs, Result barcode, DocStruct ds) throws MetadataTypeNotAllowedException {
+        if (uuidMetadata != null && !uuidMetadata.isEmpty()) {
+            Metadata md = new Metadata(prefs.getMetadataTypeByName(uuidMetadata));
+            md.setValue(barcode.getText());
+            ds.addMetadata(md);
+        }
     }
 
     private void removeExistingData(DocStruct physical, DocStruct logical, Fileformat ff, List<DocStruct> pages) throws PreferencesException {
@@ -322,7 +441,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
 
     /**
      * Searches for a barcode on image found at fileName in the image folder of process using passed reader
-     * 
+     *
      * @param fileName
      * @param mfr
      * @param process
@@ -332,7 +451,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
      * @throws InterruptedException
      * @throws SwapException
      */
-    private static String decodeBarcode(String fileName, Reader mfr, Process process)
+    private static Result decodeBarcode(String fileName, Reader mfr, Process process)
             throws IOException, DAOException, InterruptedException, SwapException {
         try (InputStream is = StorageProvider.getInstance().newInputStream(Paths.get(process.getImagesOrigDirectory(false), fileName))) {
             BufferedImage image = ImageIO.read(is);
@@ -353,15 +472,15 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
                 log.debug("Found barcode on image " + fileName + " but its checksum did not match");
                 return null;
             }
-            String result = String.valueOf(tmpResult);
+            //            String result = String.valueOf(tmpResult);
 
-            return result;
+            return tmpResult;
         }
     }
 
     /**
      * Detects barcodes in the image with name fileName in the image folder of process using passed Reader, allows for multiple Codes to be detected
-     * 
+     *
      * @param fileName
      * @param mbr
      * @param process
@@ -371,7 +490,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
      * @throws SwapException
      * @throws DAOException
      */
-    private static List<String> decodeMultipleBarcodes(String fileName, GenericMultipleBarcodeReader mbr, Process process)
+    private static List<Result> decodeMultipleBarcodes(String fileName, GenericMultipleBarcodeReader mbr, Process process)
             throws IOException, InterruptedException, SwapException, DAOException {
         try (InputStream is = StorageProvider.getInstance().newInputStream(Paths.get(process.getImagesOrigDirectory(false), fileName))) {
             BufferedImage image = ImageIO.read(is);
@@ -389,9 +508,9 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
                 log.debug("No barcode found on image " + fileName);
                 return new ArrayList<>();
             }
-            List<String> result = new ArrayList<>();
+            List<Result> result = new ArrayList<>();
             for (Result resultObject : tmpResult) {
-                result.add(String.valueOf(resultObject));
+                result.add(resultObject);
             }
 
             return result;

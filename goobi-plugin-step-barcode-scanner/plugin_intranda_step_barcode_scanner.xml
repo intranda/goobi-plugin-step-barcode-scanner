@@ -4,7 +4,7 @@
 	<skipWhenDataExists>false</skipWhenDataExists>
 	<!-- true if there might be more than 1 barcode per image -->
 	<multipleBarcodes>true</multipleBarcodes>
-	<!-- select the barcode reader implementation to use -->
+	<!-- select the barcode reader implementation to use, select from ean13, UPCA, qr, multi -->
 	<reader>multi</reader>
 	<!-- these structure elements are assumed to be exactly the page they appear 
 		on; can be combined with multipage structures and other single page structures -->
