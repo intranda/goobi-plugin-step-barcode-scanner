@@ -19,6 +19,7 @@ import org.apache.commons.lang.SystemUtils;
 import org.goobi.api.mq.TaskTicket;
 import org.goobi.api.mq.TicketHandler;
 import org.goobi.beans.Process;
+import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginReturnValue;
 
 import com.google.zxing.BinaryBitmap;
@@ -38,10 +39,12 @@ import com.google.zxing.oned.UPCAReader;
 import com.google.zxing.qrcode.QRCodeReader;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.CloseStepHelper;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
+import de.sub.goobi.persistence.managers.StepManager;
 import lombok.extern.log4j.Log4j;
 import ugh.dl.ContentFile;
 import ugh.dl.DigitalDocument;
@@ -201,7 +204,9 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
             log.error(e);
             return PluginReturnValue.ERROR;
         }
-
+        //close Step
+        Step step = StepManager.getStepById(ticket.getStepId());
+        CloseStepHelper.closeStep(step, null);
         return PluginReturnValue.FINISH;
     }
 
