@@ -22,7 +22,7 @@ pipeline {
 
     stage('build') {
       steps {
-        sh 'mvn -f goobi-plugin-step-barcode-scanner/pom.xml install'
+        sh 'mvn -f plugin/pom.xml install'
         recordIssues enabledForFailure: true, aggregatingResults: true, tools: [java(), javaDoc()]
       }
     }
