@@ -5,7 +5,7 @@
   <parent>
     <groupId>de.intranda.goobi.plugins.step</groupId>
     <artifactId>goobi-plugin-step-barcodeScanner</artifactId>
-    <version>${goobi.pluginversion}</version>
+    <version>0.0.1-SNAPSHOT</version>
   </parent>
   <repositories>
     <repository>

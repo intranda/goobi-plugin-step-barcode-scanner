@@ -2,12 +2,9 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.intranda.goobi.plugins.step</groupId>
   <artifactId>goobi-plugin-step-barcodeScanner</artifactId>
-  <version>${goobi.pluginversion}</version>
+  <version>0.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <properties>
-    <goobi.pluginversion>0.0.1-SNAPSHOT</goobi.pluginversion>
-    <!--         <dest.folder.main>/opt/digiverso/goobi/plugins/step/</dest.folder.main> -->
-    <!--         <dest.folder.gui>/opt/digiverso/goobi/plugins/GUI/</dest.folder.gui> -->
     <jar.name>plugin_intranda_step-barcode_scanner</jar.name>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
