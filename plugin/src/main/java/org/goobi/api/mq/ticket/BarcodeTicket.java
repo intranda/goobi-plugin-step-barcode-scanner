@@ -127,7 +127,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
                 log.info(process.getTitel() + ": no images found");
                 return PluginReturnValue.ERROR;
             }
-        } catch (IOException | InterruptedException | SwapException | DAOException e) {
+        } catch (IOException | SwapException | DAOException e) {
             log.error(e);
             return PluginReturnValue.ERROR;
         }
@@ -150,7 +150,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
                 removeExistingData(physical, logical, ff, pages);
             }
 
-        } catch (ReadException | PreferencesException | WriteException | IOException | InterruptedException | SwapException | DAOException e) {
+        } catch (ReadException | PreferencesException | IOException | SwapException e) {
             log.error(e);
             return PluginReturnValue.ERROR;
         }
@@ -200,7 +200,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         }
         try {
             process.writeMetadataFile(ff);
-        } catch (WriteException | PreferencesException | IOException | InterruptedException | SwapException | DAOException e) {
+        } catch (WriteException | PreferencesException | IOException | SwapException e) {
             log.error(e);
             return PluginReturnValue.ERROR;
         }
@@ -217,7 +217,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         String parentStruct = "";
         try {
             parentStruct = process.readMetadataFile().getDigitalDocument().getLogicalDocStruct().getType().getName();
-        } catch (PreferencesException | ReadException | WriteException | IOException | InterruptedException | SwapException | DAOException e) {
+        } catch (PreferencesException | ReadException | IOException | SwapException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
@@ -253,13 +253,13 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
         switch (config.getString("/reader")) {
             case ("ean13"):
                 reader = new EAN13Reader();
-                break;
+            break;
             case ("UPCA"):
                 reader = new UPCAReader();
-                break;
+            break;
             case ("qr"):
                 reader = new QRCodeReader();
-                break;
+            break;
             case ("multi"):
             default:
                 // contains all other readers, slower and more prone to find non existent codes but more versatile
@@ -311,7 +311,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
      */
     private DocStruct generateDocStructsFromString(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS,
             String imageName, DocStruct dsPage, List<Result> detectedBarcode)
-            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
+                    throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
         for (Result barcode : detectedBarcode) {
             String barcodeString = String.valueOf(barcode);
             log.debug("Barcode found in image " + imageName + " " + barcodeString);
@@ -371,7 +371,7 @@ public class BarcodeTicket implements TicketHandler<PluginReturnValue> {
      */
     private DocStruct generateDocStructsFromType(Prefs prefs, DocStruct logical, DigitalDocument digDoc, DocStruct currentMultiPageDS,
             String imageName, DocStruct dsPage, List<Result> detectedBarcode)
-            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
+                    throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
         for (Result barcode : detectedBarcode) {
             String barcodeType = barcode.getBarcodeFormat().toString();
             log.debug("Barcode found in image " + imageName + " " + barcodeType);
