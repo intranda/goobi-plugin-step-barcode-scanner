@@ -5,7 +5,7 @@
   <parent>
     <groupId>de.intranda.goobi.plugins.step</groupId>
     <artifactId>goobi-plugin-step-barcodeScanner</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>23.04.1</version>
   </parent>
   <properties>
     <jar.name>plugin_intranda_step-barcode_scanner-GUI</jar.name>
