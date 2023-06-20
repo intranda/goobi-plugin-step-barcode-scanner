@@ -9,7 +9,7 @@
     <version>23.05.2</version>
   </parent>
   <properties>
-    <jar.name>plugin_intranda_step-barcode_scanner-GUI</jar.name>
+    <jar.name>plugin_intranda_step_barcode_scanner-GUI</jar.name>
   </properties>
   <repositories>
     <repository>

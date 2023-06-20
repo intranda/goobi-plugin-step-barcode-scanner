@@ -3,7 +3,7 @@
 		<exec executable="mvn">
 			<arg value="package"/>
 		</exec>
-		<copy file="module-main/target/plugin_intranda_step-barcode_scanner.jar" todir="/opt/digiverso/goobi/plugins/step/"/>
-		<copy file="module-gui/target/plugin_intranda_step-barcode_scanner-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/"/>
+		<copy file="module-main/target/plugin_intranda_step_barcode_scanner.jar" todir="/opt/digiverso/goobi/plugins/step/"/>
+		<copy file="module-gui/target/plugin_intranda_step_barcode_scanner-GUI.jar" todir="/opt/digiverso/goobi/plugins/GUI/"/>
 	</target>
 </project>

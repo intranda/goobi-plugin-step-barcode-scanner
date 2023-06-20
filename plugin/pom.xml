@@ -5,7 +5,7 @@
   <version>23.05.2</version>
   <packaging>pom</packaging>
   <properties>
-    <jar.name>plugin_intranda_step-barcode_scanner</jar.name>
+    <jar.name>plugin_intranda_step_barcode_scanner</jar.name>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
