@@ -2,14 +2,14 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.intranda.goobi.plugins.step</groupId>
   <artifactId>goobi-plugin-step-barcodeScanner</artifactId>
-  <version>23.10.1</version>
+  <version>23.10.2</version>
   <packaging>pom</packaging>
   <properties>
     <jar.name>plugin_intranda_step_barcode_scanner</jar.name>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
-    <goobi.version>23.10.1</goobi.version>
+    <goobi.version>23.10.2</goobi.version>
   </properties>
   <url>http://maven.apache.org</url>
   <repositories>
