@@ -123,7 +123,6 @@
     </dependency>
   </dependencies>
   <modules>
-    <module>module-gui</module>
     <module>module-main</module>
   </modules>
   <scm>
