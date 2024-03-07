@@ -7,7 +7,7 @@
     <relativePath />
   </parent>
   <groupId>io.goobi.workflow.plugin</groupId>
-  <artifactId>plugin-step-goobi-plugin-step-barcodeScanner</artifactId>
+  <artifactId>plugin-step-barcode-scanner</artifactId>
   <packaging>pom</packaging>
   <modules>
     <module>module-base</module>
