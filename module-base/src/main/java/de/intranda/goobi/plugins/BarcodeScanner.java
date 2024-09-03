@@ -3,8 +3,6 @@ package de.intranda.goobi.plugins;
 import java.util.HashMap;
 import java.util.regex.Pattern;
 
-import javax.jms.JMSException;
-
 import org.goobi.api.mq.QueueType;
 import org.goobi.api.mq.TaskTicket;
 import org.goobi.api.mq.TicketGenerator;
@@ -15,6 +13,7 @@ import org.goobi.production.enums.PluginType;
 import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
+import jakarta.jms.JMSException;
 import lombok.Data;
 import lombok.extern.log4j.Log4j;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
